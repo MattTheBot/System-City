@@ -1,4 +1,4 @@
-# 🏙️ Skyblock City — Open Source Browser City Builder
+# System City — Open Source Browser City Builder
 
 > A 3D city builder that runs entirely in your browser. No install. No GPU required. Inspired by the depth of Cities: Skylines and the clarity of TheoTown — built with Babylon.js and WebGL.
 
