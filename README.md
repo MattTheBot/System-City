@@ -6,7 +6,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen)
 
-**[▶ Play in browser](https://yourusername.github.io/skyblock-city)** · [Report a bug](../../issues) · [Suggest a feature](../../issues) · [Join the discussion](../../discussions)
+**[▶ Play in browser](https://mattthebot.github.io/System-City/)** · [Report a bug](../../issues) · [Suggest a feature](../../issues) · [Join the discussion](../../discussions)
 
 ---
 
