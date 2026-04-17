@@ -23,8 +23,36 @@
     // Light
     new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
 
-    // Flat ground
-    BABYLON.MeshBuilder.CreateGround("ground", { width: 32, height: 32 }, scene);
+   // Create a 32x32 grid of tiles
+const TILE_SIZE = 1;
+const GRID = 32;
+
+// One shared tile mesh to instance from
+const tileMesh = BABYLON.MeshBuilder.CreateBox("tile", { 
+  width: TILE_SIZE - 0.05, 
+  height: 0.1, 
+  depth: TILE_SIZE - 0.05 
+}, scene);
+
+const tileMat = new BABYLON.StandardMaterial("tilemat", scene);
+tileMat.diffuseColor = new BABYLON.Color3(0.3, 0.5, 0.3); // grass green
+tileMesh.material = tileMat;
+
+// Store all tiles in a grid array (you'll use this for the whole game)
+const grid = [];
+for (let x = 0; x < GRID; x++) {
+  grid[x] = [];
+  for (let z = 0; z < GRID; z++) {
+    const tile = tileMesh.createInstance(`tile_${x}_${z}`);
+    tile.position.x = (x - GRID/2) * TILE_SIZE;
+    tile.position.z = (z - GRID/2) * TILE_SIZE;
+    tile.position.y = 0;
+    grid[x][z] = { mesh: tile, type: "empty" };
+  }
+}
+
+// Remove the original template mesh (instances are all we need)
+tileMesh.isVisible = false;
 
     engine.runRenderLoop(() => scene.render());
     window.addEventListener("resize", () => engine.resize());
