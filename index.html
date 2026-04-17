@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SystemCity</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    canvas { width: 100vw; height: 100vh; display: block; }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <script src="https://cdn.babylonjs.com/babylon.js"></script>
+  <script>
+    const engine = new BABYLON.Engine(document.getElementById("c"), true);
+    const scene = new BABYLON.Scene(engine);
+
+    // Camera — orbit with left mouse, zoom with scroll
+    const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI/2, Math.PI/3, 30, BABYLON.Vector3.Zero(), scene);
+    cam.attachControl(document.getElementById("c"), true);
+    cam.lowerRadiusLimit = 5;
+    cam.upperRadiusLimit = 80;
+
+    // Light
+    new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+
+    // Flat ground
+    BABYLON.MeshBuilder.CreateGround("ground", { width: 32, height: 32 }, scene);
+
+    engine.runRenderLoop(() => scene.render());
+    window.addEventListener("resize", () => engine.resize());
+  </script>
+</body>
+</html>
