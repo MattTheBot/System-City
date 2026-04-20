@@ -1,61 +1,292 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>SystemCity</title>
+  <title>System City v0.1</title>
   <style>
-    * { margin: 0; padding: 0; }
-    canvas { width: 100vw; height: 100vh; display: block; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; }
+    #c { width: 100vw; height: 100vh; display: block; }
+    #hud {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 56px; background: rgba(15,15,20,0.85);
+      display: flex; align-items: center; gap: 12px; padding: 0 16px;
+      font-family: sans-serif; font-size: 13px; color: #ccc;
+    }
+    #hud button {
+      background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+      color: white; padding: 6px 14px; border-radius: 6px; cursor: pointer;
+      font-size: 12px;
+    }
+    #hud button:hover { background: rgba(255,255,255,0.2); }
+    #hud button.active { background: #2a6db5; border-color: #4a8fd5; }
   </style>
 </head>
 <body>
-  <canvas id="c"></canvas>
-  <script src="https://cdn.babylonjs.com/babylon.js"></script>
-  <script>
-    const engine = new BABYLON.Engine(document.getElementById("c"), true);
-    const scene = new BABYLON.Scene(engine);
+<canvas id="c"></canvas>
+<div id="hud">
+  <span id="mode-label">Mode: camera</span>
+  <button id="btn-road" onclick="setMode('road')">Road tool</button>
+  <button id="btn-zone" onclick="setMode('zone')">Zone tool</button>
+  <span style="margin-left:auto; font-size:11px; color:#666">System City v0.1</span>
+</div>
 
-    // Camera — orbit with left mouse, zoom with scroll
-    const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI/2, Math.PI/3, 30, BABYLON.Vector3.Zero(), scene);
-    cam.attachControl(document.getElementById("c"), true);
-    cam.lowerRadiusLimit = 5;
-    cam.upperRadiusLimit = 80;
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script>
 
-    // Light
-    new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+// ── Engine + Scene ───────────────────────────────────────────
+const canvas = document.getElementById("c");
+const engine = new BABYLON.Engine(canvas, true);
+const scene  = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.53, 0.72, 0.87, 1); // sky blue
 
-   // Create a 32x32 grid of tiles
-const TILE_SIZE = 1;
-const GRID = 32;
+// ── Camera ───────────────────────────────────────────────────
+const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI/2, Math.PI/3, 80, BABYLON.Vector3.Zero(), scene);
+cam.attachControl(canvas, true);
+cam.lowerRadiusLimit  = 10;
+cam.upperRadiusLimit  = 200;
+cam.lowerBetaLimit    = 0.2;
+cam.upperBetaLimit    = Math.PI / 2.1;
+cam.panningSensibility = 80;
 
-// One shared tile mesh to instance from
-const tileMesh = BABYLON.MeshBuilder.CreateBox("tile", { 
-  width: TILE_SIZE - 0.05, 
-  height: 0.1, 
-  depth: TILE_SIZE - 0.05 
+// ── Lights ───────────────────────────────────────────────────
+const sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-1, -2, -1), scene);
+sun.intensity = 1.1;
+new BABYLON.HemisphericLight("amb", new BABYLON.Vector3(0,1,0), scene).intensity = 0.5;
+
+// ── Terrain ──────────────────────────────────────────────────
+// Flat for v0.1 — swap this for CreateGroundFromHeightMap later
+const terrain = BABYLON.MeshBuilder.CreateGround("terrain", {
+  width: 512, height: 512, subdivisions: 64
 }, scene);
+const tMat = new BABYLON.StandardMaterial("tmat", scene);
+tMat.diffuseColor = new BABYLON.Color3(0.28, 0.52, 0.18);
+terrain.material = tMat;
 
-const tileMat = new BABYLON.StandardMaterial("tilemat", scene);
-tileMat.diffuseColor = new BABYLON.Color3(0.3, 0.5, 0.3); // grass green
-tileMesh.material = tileMat;
+// ── Grid snap ────────────────────────────────────────────────
+const GRID = 8;
+function snapToGrid(p) {
+  return new BABYLON.Vector3(
+    Math.round(p.x / GRID) * GRID,
+    p.y,
+    Math.round(p.z / GRID) * GRID
+  );
+}
 
-// Store all tiles in a grid array (you'll use this for the whole game)
-const grid = [];
-for (let x = 0; x < GRID; x++) {
-  grid[x] = [];
-  for (let z = 0; z < GRID; z++) {
-    const tile = tileMesh.createInstance(`tile_${x}_${z}`);
-    tile.position.x = (x - GRID/2) * TILE_SIZE;
-    tile.position.z = (z - GRID/2) * TILE_SIZE;
-    tile.position.y = 0;
-    grid[x][z] = { mesh: tile, type: "empty" };
+// ── Snap indicator ───────────────────────────────────────────
+const snapDot = BABYLON.MeshBuilder.CreateCylinder("snap", {diameter:1.8, height:0.3, tessellation:12}, scene);
+const sdMat = new BABYLON.StandardMaterial("sdmat", scene);
+sdMat.diffuseColor = new BABYLON.Color3(1, 0.9, 0);
+sdMat.emissiveColor = new BABYLON.Color3(0.3, 0.3, 0);
+snapDot.material = sdMat;
+snapDot.isPickable = false;
+snapDot.isVisible = false;
+
+// ── Mode state ───────────────────────────────────────────────
+let mode = "camera"; // "camera" | "road" | "zone"
+function setMode(m) {
+  mode = m;
+  document.getElementById("mode-label").textContent = "Mode: " + m;
+  document.querySelectorAll("#hud button").forEach(b => b.classList.remove("active"));
+  const btn = document.getElementById("btn-" + m);
+  if (btn) btn.classList.add("active");
+  snapDot.isVisible = (m === "road");
+  roadState.reset();
+}
+
+// ── Road placement state machine ─────────────────────────────
+const roadState = {
+  phase: 0,       // 0=idle 1=placed_A 2=placed_B
+  pointA: null,
+  pointB: null,   // bezier handle
+  previewMesh: null,
+  markerA: null,
+
+  reset() {
+    this.phase = 0;
+    this.pointA = null;
+    this.pointB = null;
+    if (this.previewMesh) { this.previewMesh.dispose(); this.previewMesh = null; }
+    if (this.markerA) { this.markerA.dispose(); this.markerA = null; }
+  },
+
+  placeMarker(pos) {
+    const m = BABYLON.MeshBuilder.CreateSphere("markerA", {diameter:2}, scene);
+    m.position = pos.clone();
+    m.position.y += 1;
+    m.isPickable = false;
+    const mat = new BABYLON.StandardMaterial("mmat", scene);
+    mat.diffuseColor = new BABYLON.Color3(0.2, 0.6, 1);
+    mat.emissiveColor = new BABYLON.Color3(0.1, 0.2, 0.5);
+    m.material = mat;
+    return m;
+  },
+
+  updatePreview(A, handle, endPos) {
+    if (this.previewMesh) this.previewMesh.dispose();
+    const curve = BABYLON.Curve3.CreateQuadraticBezier(A, handle, endPos, 30);
+    const pts = curve.getPoints();
+    // Extrude road along curve as a tube
+    this.previewMesh = BABYLON.MeshBuilder.CreateTube("roadPreview", {
+      path: pts, radius: 4, tessellation: 6, updatable: false
+    }, scene);
+    this.previewMesh.isPickable = false;
+    const mat = new BABYLON.StandardMaterial("prevMat", scene);
+    mat.diffuseColor = new BABYLON.Color3(0.4, 0.7, 1);
+    mat.alpha = 0.6;
+    this.previewMesh.material = mat;
+  }
+};
+
+// ── Roads storage ─────────────────────────────────────────────
+const roads = [];
+function buildRoad(A, handle, C) {
+  const curve = BABYLON.Curve3.CreateQuadraticBezier(A, handle, C, 40);
+  const pts = curve.getPoints();
+  const mesh = BABYLON.MeshBuilder.CreateTube("road_" + roads.length, {
+    path: pts, radius: 4, tessellation: 6
+  }, scene);
+  const mat = new BABYLON.StandardMaterial("roadMat", scene);
+  mat.diffuseColor = new BABYLON.Color3(0.25, 0.25, 0.25);
+  mesh.material = mat;
+  mesh.isPickable = false;
+
+  const road = { id: roads.length, pointA: A, handle, pointC: C, curve: pts, plots: [] };
+  generatePlots(road);
+  roads.push(road);
+  console.log("Road built, plots:", road.plots.length);
+}
+
+// ── Plot generation ───────────────────────────────────────────
+const plots = [];
+const PLOT_W = 8, PLOT_D = 12, PLOT_OFFSET = 8;
+
+function generatePlots(road) {
+  const pts = road.curve;
+  // Sample every PLOT_W units along the curve
+  for (let i = 4; i < pts.length - 4; i += 3) {
+    const p = pts[i];
+    // Direction along curve at this point
+    const next = pts[Math.min(i+1, pts.length-1)];
+    const dir = next.subtract(p).normalize();
+    // Perpendicular (left and right)
+    const perp = new BABYLON.Vector3(-dir.z, 0, dir.x);
+
+    for (const side of [1, -1]) {
+      const centre = p.add(perp.scale(side * (PLOT_OFFSET + PLOT_W / 2)));
+      centre.y = 0.05;
+      spawnPlot(centre, Math.atan2(dir.x, dir.z), road);
+    }
   }
 }
 
-// Remove the original template mesh (instances are all we need)
-tileMesh.isVisible = false;
+function spawnPlot(position, angle, road) {
+  const box = BABYLON.MeshBuilder.CreateBox("plot_" + plots.length, {
+    width: PLOT_W, depth: PLOT_D, height: 0.2
+  }, scene);
+  box.position = position.clone();
+  box.rotation.y = angle;
+  const mat = new BABYLON.StandardMaterial("plotMat_" + plots.length, scene);
+  mat.diffuseColor = new BABYLON.Color3(0.6, 0.85, 0.45);
+  mat.alpha = 0.7;
+  box.material = mat;
 
-    engine.runRenderLoop(() => scene.render());
-    window.addEventListener("resize", () => engine.resize());
-  </script>
+  const plot = { id: plots.length, mesh: box, zone: null, building: null, road };
+  plots.push(plot);
+  road.plots.push(plot);
+
+  // Click to zone
+  box.actionManager = new BABYLON.ActionManager(scene);
+  box.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+    BABYLON.ActionManager.OnPickTrigger,
+    () => { if (mode === "zone") zoneplot(plot); }
+  ));
+}
+
+function zoneplot(plot) {
+  if (plot.zone) return;
+  plot.zone = "residential";
+  plot.mesh.material.diffuseColor = new BABYLON.Color3(0.3, 0.7, 0.3);
+  plot.mesh.material.alpha = 0.9;
+  spawnBuilding(plot);
+}
+
+function spawnBuilding(plot) {
+  const h = 3 + Math.random() * 8;
+  const building = BABYLON.MeshBuilder.CreateBox("building_" + plot.id, {
+    width: PLOT_W * 0.6, depth: PLOT_D * 0.5, height: h
+  }, scene);
+  building.position = plot.mesh.position.clone();
+  building.position.y = h / 2;
+  building.rotation.y = plot.mesh.rotation.y;
+  const mat = new BABYLON.StandardMaterial("bmat_" + plot.id, scene);
+  mat.diffuseColor = new BABYLON.Color3(
+    0.7 + Math.random()*0.2,
+    0.7 + Math.random()*0.2,
+    0.7 + Math.random()*0.2
+  );
+  building.material = mat;
+  building.isPickable = false;
+  plot.building = building;
+}
+
+// ── Pointer events ────────────────────────────────────────────
+scene.onPointerMove = function() {
+  if (mode !== "road") return;
+  const hit = scene.pick(scene.pointerX, scene.pointerY, m => m.name === "terrain");
+  if (!hit.hit) return;
+  const snapped = snapToGrid(hit.pickedPoint);
+  snapDot.position.x = snapped.x;
+  snapDot.position.y = hit.pickedPoint.y + 0.2;
+  snapDot.position.z = snapped.z;
+
+  if (roadState.phase === 1) {
+    // Preview straight line A → cursor
+    roadState.updatePreview(roadState.pointA, snapped, snapped);
+  }
+  if (roadState.phase === 2) {
+    // Preview curve A → B(handle) → cursor
+    const snappedEnd = snapToGrid(hit.pickedPoint);
+    roadState.updatePreview(roadState.pointA, roadState.pointB, snappedEnd);
+  }
+};
+
+scene.onPointerDown = function(evt) {
+  if (mode !== "road") return;
+  const hit = scene.pick(scene.pointerX, scene.pointerY, m => m.name === "terrain");
+  if (!hit.hit) return;
+
+  if (evt.button === 2) {
+    // Right click
+    if (roadState.phase === 2) {
+      const C = snapToGrid(hit.pickedPoint);
+      buildRoad(roadState.pointA, roadState.pointB, C);
+    }
+    roadState.reset();
+    return;
+  }
+
+  if (evt.button === 0) {
+    // Left click
+    const snapped = snapToGrid(hit.pickedPoint);
+    if (roadState.phase === 0) {
+      roadState.pointA = snapped.clone();
+      roadState.pointA.y = hit.pickedPoint.y;
+      roadState.phase = 1;
+      roadState.markerA = roadState.placeMarker(roadState.pointA);
+    } else if (roadState.phase === 1) {
+      roadState.pointB = hit.pickedPoint.clone(); // handle floats free
+      roadState.phase = 2;
+    }
+  }
+};
+
+// Prevent context menu on right click
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+
+// ── Render loop ───────────────────────────────────────────────
+engine.runRenderLoop(() => scene.render());
+window.addEventListener("resize", () => engine.resize());
+
+</script>
 </body>
 </html>
