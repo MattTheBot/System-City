@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>System City v0.2</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #1a1a2e; font-family: system-ui, sans-serif; }
+    #c { width: 100vw; height: 100vh; display: block; }
+
+    #hud {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      height: 60px; background: rgba(10,10,18,0.88);
+      display: flex; align-items: center; gap: 8px; padding: 0 16px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+    }
+    .hud-sep { width: 1px; height: 32px; background: rgba(255,255,255,0.12); margin: 0 4px; }
+    #hud button {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #ccc; padding: 6px 13px; border-radius: 5px;
+      cursor: pointer; font-size: 12px; transition: background 0.15s;
+    }
+    #hud button:hover { background: rgba(255,255,255,0.15); }
+    #hud button.active { background: #1a4fa8; border-color: #4a8fd5; color: #fff; }
+    #hud button.active-red { background: #7a1a1a; border-color: #d54a4a; color: #fff; }
+    #mode-label { font-size: 12px; color: #888; min-width: 130px; }
+    #hud-right { margin-left: auto; font-size: 11px; color: #444; }
+
+    #terrain-panel {
+      display: none; position: absolute; top: 15px; right: 15px;
+      background: rgba(12,12,22,0.93); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; padding: 16px; width: 220px; color: #ccc; font-size: 13px;
+    }
+    #terrain-panel h4 { margin: 0 0 12px; font-size: 13px; font-weight: 500; color: #fff; }
+    .tp-group { margin-bottom: 12px; }
+    .tp-label { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; color: #aaa; }
+    #terrain-panel input[type=range] { width: 100%; accent-color: #4a8fd5; }
+    .tp-brushes { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 6px; }
+    .tp-brushes button {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      color: #bbb; padding: 5px 0; border-radius: 4px; cursor: pointer; font-size: 11px;
+    }
+    .tp-brushes button:hover { background: rgba(255,255,255,0.13); }
+    .tp-brushes button.sel { background: #1a4fa8; border-color: #4a8fd5; color: #fff; }
+    #export-btn {
+      width: 100%; margin-top: 10px; padding: 7px;
+      background: #163d25; border: 1px solid #2a7a4a;
+      color: #7fffc4; border-radius: 5px; cursor: pointer; font-size: 12px;
+    }
+    .tp-hint { font-size: 11px; color: #555; margin-top: 10px; line-height: 1.5; }
+
+    #road-panel {
+      display: none; position: absolute; top: 15px; left: 15px;
+      background: rgba(12,12,22,0.93); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; padding: 16px; width: 215px; color: #ccc; font-size: 13px;
+    }
+    #road-panel h4 { margin: 0 0 10px; font-size: 13px; font-weight: 500; color: #fff; }
+    .road-type-btn {
+      display: block; width: 100%;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      color: #bbb; padding: 7px 10px; margin-bottom: 5px;
+      border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left;
+    }
+    .road-type-btn:hover { background: rgba(255,255,255,0.12); }
+    .road-type-btn.sel { background: #1a4fa8; border-color: #4a8fd5; color: #fff; }
+    .road-hint { font-size: 11px; color: #555; margin-top: 8px; line-height: 1.6; }
+
+    #zone-panel {
+      display: none; position: absolute; top: 15px; left: 15px;
+      background: rgba(12,12,22,0.93); border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px; padding: 16px; width: 190px; color: #ccc; font-size: 13px;
+    }
+    #zone-panel h4 { margin: 0 0 10px; font-size: 13px; font-weight: 500; color: #fff; }
+    .zone-btn {
+      display: block; width: 100%; padding: 8px 10px; margin-bottom: 5px;
+      border-radius: 4px; cursor: pointer; font-size: 12px; text-align: left; border: 1px solid transparent;
+    }
+    .zone-btn.z-r { background: rgba(40,140,50,0.25); border-color: rgba(60,180,70,0.3); color: #8fda98; }
+    .zone-btn.z-c { background: rgba(30,80,180,0.25); border-color: rgba(50,110,220,0.3); color: #8ab4f8; }
+    .zone-btn.z-i { background: rgba(160,130,20,0.25); border-color: rgba(200,170,30,0.3); color: #f0cc55; }
+    .zone-btn.sel { filter: brightness(1.5); border-width: 1.5px; }
+
+    #info {
+      position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+      background: rgba(12,12,22,0.82); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px; padding: 7px 16px;
+      font-size: 12px; color: #aaa; pointer-events: none; white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <span id="mode-label">Mode: camera</span>
+  <div class="hud-sep"></div>
+  <button id="btn-terrain" onclick="setMode('terrain')">Terrain</button>
+  <div class="hud-sep"></div>
+  <button id="btn-road"     onclick="setMode('road')">Road</button>
+  <button id="btn-zone"     onclick="setMode('zone')">Zone</button>
+  <button id="btn-bulldoze" onclick="setMode('bulldoze')">Bulldoze</button>
+  <div id="hud-right">System City v0.2</div>
+</div>
+
+<div id="terrain-panel">
+  <h4>Terrain editor</h4>
+  <div class="tp-group">
+    <div class="tp-label"><span>Brush radius</span><span id="br-val">12</span></div>
+    <input type="range" id="br" min="2" max="60" step="1" value="12">
+  </div>
+  <div class="tp-group">
+    <div class="tp-label"><span>Strength</span><span id="bs-val">0.50</span></div>
+    <input type="range" id="bs" min="0.05" max="3" step="0.05" value="0.5">
+  </div>
+  <div class="tp-group">
+    <div class="tp-label"><span>Brush mode</span></div>
+    <div class="tp-brushes">
+      <button class="sel" onclick="setBrush('raise',this)">Raise</button>
+      <button onclick="setBrush('lower',this)">Lower</button>
+      <button onclick="setBrush('flatten',this)">Flatten</button>
+      <button onclick="setBrush('smooth',this)">Smooth</button>
+    </div>
+  </div>
+  <button id="export-btn" onclick="exportHeightmap()">Export heightmap PNG</button>
+  <div class="tp-hint">Hold Shift + drag to sculpt.<br>Release Shift to orbit camera.</div>
+</div>
+
+<div id="road-panel">
+  <h4>Road type</h4>
+  <button class="road-type-btn sel" onclick="setRoadType('dirt',this)">Dirt track (1 lane)</button>
+  <button class="road-type-btn"     onclick="setRoadType('residential',this)">Residential (2 lane)</button>
+  <button class="road-type-btn"     onclick="setRoadType('avenue',this)">Avenue (4 lane)</button>
+  <button class="road-type-btn"     onclick="setRoadType('boulevard',this)">Boulevard (6 lane)</button>
+  <div class="road-hint">
+    L-click 1 — place start<br>
+    L-click 2 — set curve handle<br>
+    R-click — finish road<br>
+    <em style="color:#3a3a3a">R-click after 1st click = straight</em>
+  </div>
+</div>
+
+<div id="zone-panel">
+  <h4>Zone type</h4>
+  <button class="zone-btn z-r sel" onclick="setZone('residential',this)">Residential (key 1)</button>
+  <button class="zone-btn z-c"     onclick="setZone('commercial',this)">Commercial (key 2)</button>
+  <button class="zone-btn z-i"     onclick="setZone('industrial',this)">Industrial (key 3)</button>
+  <div class="road-hint" style="margin-top:8px">Click a green plot to zone it.</div>
+</div>
+
+<div id="info">Camera mode — select a tool from the HUD</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.44.0/babylon.js"></script>
+<script>
+"use strict";
+
+// ── All state vars declared at top to avoid TDZ errors ──────
+var appMode       = "camera";
+var brushMode     = "raise";
+var brushRadius   = 12;
+var brushStr      = 0.5;
+var isShift       = false;
+var isPainting    = false;
+var isMouseDown   = false;
+var currentRoadType = "dirt";
+var currentZone   = "residential";
+var roads = [];
+var plots = [];
+
+// ── Engine + Scene ──────────────────────────────────────────
+var canvas = document.getElementById("c");
+var engine = new BABYLON.Engine(canvas, true, { preserveDrawingBuffer: true });
+var scene  = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.53, 0.72, 0.87, 1);
+
+// ── Camera ──────────────────────────────────────────────────
+var cam = new BABYLON.ArcRotateCamera("cam", -Math.PI/2, Math.PI/3, 140, BABYLON.Vector3.Zero(), scene);
+cam.attachControl(canvas, true);
+cam.lowerRadiusLimit     = 8;
+cam.upperRadiusLimit     = 400;
+cam.lowerBetaLimit       = 0.18;
+cam.upperBetaLimit       = Math.PI / 2.05;
+cam.panningSensibility   = 55;
+cam.wheelDeltaPercentage = 0.01;
+cam.inputs.attached.pointers.buttons = [1, 2];
+
+// ── Lights ──────────────────────────────────────────────────
+var sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-1,-2,-1), scene);
+sun.intensity = 1.1;
+sun.position  = new BABYLON.Vector3(100, 200, 100);
+var amb = new BABYLON.HemisphericLight("amb", new BABYLON.Vector3(0,1,0), scene);
+amb.intensity = 0.45;
+
+// ── Terrain ─────────────────────────────────────────────────
+var T_SIZE = 512;
+var T_SEGS = 150;
+
+var terrain = BABYLON.MeshBuilder.CreateGround("terrain", {
+  width: T_SIZE, height: T_SIZE, subdivisions: T_SEGS, updatable: true
+}, scene);
+var terrainMat = new BABYLON.StandardMaterial("tmat", scene);
+terrainMat.diffuseColor  = new BABYLON.Color3(0.28, 0.52, 0.18);
+terrainMat.specularColor = new BABYLON.Color3(0.04, 0.04, 0.04);
+terrain.material = terrainMat;
+
+function getVerts() { return terrain.getVerticesData(BABYLON.VertexBuffer.PositionKind); }
+function setVerts(v) { terrain.updateVerticesData(BABYLON.VertexBuffer.PositionKind, v); terrain.createNormals(false); }
+
+// ── Terrain brush ────────────────────────────────────────────
+function applyBrush(hp) {
+  var verts = getVerts();
+  var hx = hp.x, hz = hp.z, hy = hp.y;
+  var rowLen = (T_SEGS + 1) * 3;
+  if (brushMode === "smooth") {
+    var copy = verts.slice();
+    for (var i = 0; i < verts.length; i += 3) {
+      var dx = verts[i]-hx, dz = verts[i+2]-hz;
+      var dist = Math.sqrt(dx*dx+dz*dz);
+      if (dist > brushRadius) continue;
+      var falloff = 1 - dist/brushRadius;
+      var nb = [i-3, i+3, i-rowLen, i+rowLen];
+      var sum = copy[i+1], cnt = 1;
+      for (var j = 0; j < nb.length; j++) { var n = nb[j]; if (n>=0 && n<copy.length) { sum+=copy[n+1]; cnt++; } }
+      verts[i+1] += ((sum/cnt) - verts[i+1]) * falloff * brushStr * 0.4;
+    }
+  } else {
+    for (var i = 0; i < verts.length; i += 3) {
+      var dx = verts[i]-hx, dz = verts[i+2]-hz;
+      var dist = Math.sqrt(dx*dx+dz*dz);
+      if (dist > brushRadius) continue;
+      var falloff = 1 - dist/brushRadius;
+      var delta = brushStr * falloff;
+      if (brushMode === "raise")   verts[i+1] += delta;
+      if (brushMode === "lower")   verts[i+1] -= delta;
+      if (brushMode === "flatten") verts[i+1] += (hy - verts[i+1]) * falloff * 0.25;
+      verts[i+1] = Math.max(-30, Math.min(80, verts[i+1]));
+    }
+  }
+  setVerts(verts);
+}
+
+function exportHeightmap() {
+  var size = T_SEGS + 1;
+  var verts = getVerts();
+  var cvs = document.createElement("canvas");
+  cvs.width = cvs.height = size;
+  var ctx = cvs.getContext("2d");
+  var img = ctx.createImageData(size, size);
+  var minY = Infinity, maxY = -Infinity;
+  for (var i = 1; i < verts.length; i += 3) { if (verts[i]<minY) minY=verts[i]; if (verts[i]>maxY) maxY=verts[i]; }
+  var range = maxY - minY || 1;
+  for (var r = 0; r < size; r++) {
+    for (var c = 0; c < size; c++) {
+      var vi = (r*size+c)*3;
+      var v  = Math.round(((verts[vi+1]-minY)/range)*255);
+      var pi = (r*size+c)*4;
+      img.data[pi]=img.data[pi+1]=img.data[pi+2]=v; img.data[pi+3]=255;
+    }
+  }
+  ctx.putImageData(img,0,0);
+  var a = document.createElement("a");
+  a.download = "system-city-heightmap.png";
+  a.href = cvs.toDataURL(); a.click();
+}
+
+// ── Brush ring ───────────────────────────────────────────────
+var brushRing = BABYLON.MeshBuilder.CreateTorus("br", { diameter:10, thickness:0.45, tessellation:40 }, scene);
+var brMat = new BABYLON.StandardMaterial("brm", scene);
+brMat.diffuseColor  = new BABYLON.Color3(1,0.3,0.3);
+brMat.emissiveColor = new BABYLON.Color3(0.5,0.1,0.1);
+brushRing.material   = brMat;
+brushRing.isPickable = false;
+brushRing.isVisible  = false;
+brushRing.rotation.x = Math.PI / 2;
+
+function syncBrushRing(pos) {
+  brushRing.position.x = pos.x; brushRing.position.y = pos.y+0.3; brushRing.position.z = pos.z;
+  var s = brushRadius / 5; brushRing.scaling.x = s; brushRing.scaling.z = s;
+}
+
+// ── Grid snap ─────────────────────────────────────────────────
+var GRID = 8;
+function snapToGrid(p) {
+  return new BABYLON.Vector3(Math.round(p.x/GRID)*GRID, p.y, Math.round(p.z/GRID)*GRID);
+}
+
+var snapDot = BABYLON.MeshBuilder.CreateCylinder("sd", { diameter:2, height:0.4, tessellation:14 }, scene);
+var sdMat = new BABYLON.StandardMaterial("sdm", scene);
+sdMat.diffuseColor  = new BABYLON.Color3(1,0.9,0.1);
+sdMat.emissiveColor = new BABYLON.Color3(0.4,0.35,0);
+snapDot.material    = sdMat;
+snapDot.isPickable  = false;
+snapDot.isVisible   = false;
+
+// ── Road types ───────────────────────────────────────────────
+var ROAD_TYPES = {
+  dirt:        { width:3,  color:[0.45,0.32,0.18], plotDepth:10, plotOffset:4  },
+  residential: { width:5,  color:[0.20,0.20,0.20], plotDepth:14, plotOffset:6  },
+  avenue:      { width:9,  color:[0.17,0.17,0.17], plotDepth:18, plotOffset:8  },
+  boulevard:   { width:14, color:[0.14,0.14,0.14], plotDepth:22, plotOffset:10 },
+};
+
+// ── Road state machine ───────────────────────────────────────
+var rs = {
+  phase: 0, A: null, B: null, preview: null, markerA: null,
+  reset: function() {
+    this.phase=0; this.A=null; this.B=null;
+    if (this.preview)  { this.preview.dispose();  this.preview=null;  }
+    if (this.markerA)  { this.markerA.dispose();  this.markerA=null;  }
+  },
+  placeMarker: function(pos) {
+    var m = BABYLON.MeshBuilder.CreateSphere("ma",{diameter:2.2},scene);
+    m.position=pos.clone(); m.position.y+=1.1; m.isPickable=false;
+    var mat=new BABYLON.StandardMaterial("mam",scene);
+    mat.diffuseColor=new BABYLON.Color3(0.2,0.55,1); mat.emissiveColor=new BABYLON.Color3(0.05,0.2,0.5);
+    m.material=mat; return m;
+  },
+  updatePreview: function(A, handle, end) {
+    if (this.preview) this.preview.dispose();
+    var curve = BABYLON.Curve3.CreateQuadraticBezier(A, handle, end, 32);
+    var rt = ROAD_TYPES[currentRoadType];
+    this.preview = BABYLON.MeshBuilder.CreateTube("rp",{ path:curve.getPoints(), radius:rt.width/2, tessellation:6 },scene);
+    this.preview.isPickable=false;
+    var pm=new BABYLON.StandardMaterial("rpm",scene);
+    var c=rt.color; pm.diffuseColor=new BABYLON.Color3(c[0]+0.15,c[1]+0.15,c[2]+0.4); pm.alpha=0.5;
+    this.preview.material=pm;
+  }
+};
+
+// ── Build road ───────────────────────────────────────────────
+function buildRoad(A, handle, C) {
+  var rt    = ROAD_TYPES[currentRoadType];
+  var curve = BABYLON.Curve3.CreateQuadraticBezier(A, handle, C, 48);
+  var pts   = curve.getPoints();
+
+  var mesh = BABYLON.MeshBuilder.CreateTube("road_"+roads.length,{ path:pts, radius:rt.width/2, tessellation:8 },scene);
+  mesh.isPickable=false;
+  var rm=new BABYLON.StandardMaterial("rm"+roads.length,scene);
+  var c=rt.color; rm.diffuseColor=new BABYLON.Color3(c[0],c[1],c[2]); rm.specularColor=new BABYLON.Color3(0.03,0.03,0.03);
+  mesh.material=rm;
+  addCentreDashes(pts);
+
+  var road={ id:roads.length, type:currentRoadType, A:A, handle:handle, C:C, curve:pts, plots:[] };
+  generatePlots(road);
+  roads.push(road);
+}
+
+function addCentreDashes(pts) {
+  var mat=new BABYLON.StandardMaterial("dm"+roads.length,scene);
+  mat.diffuseColor=new BABYLON.Color3(1,1,1); mat.emissiveColor=new BABYLON.Color3(0.3,0.3,0.3);
+  for (var i=3; i<pts.length-3; i+=5) {
+    var p=pts[i], d=pts[Math.min(i+1,pts.length-1)].subtract(p).normalize();
+    var dash=BABYLON.MeshBuilder.CreateBox("d"+i,{width:0.35,depth:1.6,height:0.06},scene);
+    dash.position=p.clone(); dash.position.y+=0.2; dash.rotation.y=Math.atan2(d.x,d.z);
+    dash.isPickable=false; dash.material=mat;
+  }
+}
+
+// ── Plots ────────────────────────────────────────────────────
+function generatePlots(road) {
+  var pts=road.curve, rt=ROAD_TYPES[road.type];
+  for (var i=4; i<pts.length-4; i+=4) {
+    var p=pts[i], next=pts[Math.min(i+1,pts.length-1)];
+    var dir=next.subtract(p).normalize();
+    var perp=new BABYLON.Vector3(-dir.z,0,dir.x);
+    var ang=Math.atan2(dir.x,dir.z);
+    var sides=[1,-1];
+    for (var s=0; s<sides.length; s++) {
+      var side=sides[s];
+      var centre=p.add(perp.scale(side*(rt.plotOffset+rt.plotDepth/2)));
+      centre.y=0.1;
+      spawnPlot(centre,ang,road,rt.plotDepth);
+    }
+  }
+}
+
+function spawnPlot(pos,angle,road,depth) {
+  var box=BABYLON.MeshBuilder.CreateBox("plot_"+plots.length,{width:GRID,depth:depth,height:0.2},scene);
+  box.position=pos.clone(); box.rotation.y=angle;
+  var pm=new BABYLON.StandardMaterial("pm"+plots.length,scene);
+  pm.diffuseColor=new BABYLON.Color3(0.55,0.82,0.40); pm.alpha=0.65;
+  box.material=pm;
+  var plot={ id:plots.length, mesh:box, zone:null, building:null, road:road };
+  plots.push(plot); road.plots.push(plot);
+  box.actionManager=new BABYLON.ActionManager(scene);
+  box.actionManager.registerAction(new BABYLON.ExecuteCodeAction(
+    BABYLON.ActionManager.OnPickTrigger, (function(pl){ return function() {
+      if (appMode==="zone")     zonePlot(pl);
+      if (appMode==="bulldoze") bulldozePlot(pl);
+    }; })(plot)
+  ));
+}
+
+var ZONE_COLS = {
+  residential: new BABYLON.Color3(0.25,0.72,0.28),
+  commercial:  new BABYLON.Color3(0.20,0.45,0.85),
+  industrial:  new BABYLON.Color3(0.85,0.72,0.15),
+};
+
+function zonePlot(plot) {
+  if (plot.zone) return;
+  plot.zone=currentZone;
+  plot.mesh.material.diffuseColor=ZONE_COLS[currentZone];
+  plot.mesh.material.alpha=0.9;
+  spawnBuilding(plot);
+}
+
+function spawnBuilding(plot) {
+  var rt=ROAD_TYPES[plot.road.type];
+  var bw=GRID*0.62, bd=rt.plotDepth*0.52;
+  var h= plot.zone==="residential" ? 3+Math.random()*7 : plot.zone==="commercial" ? 6+Math.random()*20 : 4+Math.random()*6;
+  var b=BABYLON.MeshBuilder.CreateBox("b"+plot.id,{width:bw,depth:bd,height:h},scene);
+  b.position=plot.mesh.position.clone(); b.position.y=h/2+0.15; b.rotation.y=plot.mesh.rotation.y; b.isPickable=false;
+  var bm=new BABYLON.StandardMaterial("bm"+plot.id,scene);
+  var r=Math.random;
+  if (plot.zone==="residential") bm.diffuseColor=new BABYLON.Color3(0.82+r()*0.12,0.78+r()*0.12,0.70+r()*0.12);
+  if (plot.zone==="commercial")  bm.diffuseColor=new BABYLON.Color3(0.50+r()*0.2, 0.60+r()*0.2, 0.78+r()*0.2);
+  if (plot.zone==="industrial")  bm.diffuseColor=new BABYLON.Color3(0.58+r()*0.1, 0.53+r()*0.1, 0.46+r()*0.1);
+  bm.specularColor=new BABYLON.Color3(0.05,0.05,0.05); b.material=bm; plot.building=b;
+}
+
+function bulldozePlot(plot) {
+  if (plot.building) { plot.building.dispose(); plot.building=null; }
+  plot.zone=null;
+  plot.mesh.material.diffuseColor=new BABYLON.Color3(0.55,0.82,0.40); plot.mesh.material.alpha=0.65;
+}
+
+function nearestNode(pos,threshold) {
+  for (var i=0; i<roads.length; i++) {
+    var road=roads[i];
+    var nodes=[road.A,road.C];
+    for (var j=0; j<nodes.length; j++) {
+      if (nodes[j] && BABYLON.Vector3.Distance(pos,nodes[j])<threshold) return nodes[j].clone();
+    }
+  }
+  return null;
+}
+
+// ── Mode + UI ────────────────────────────────────────────────
+function setMode(m) {
+  appMode=m; rs.reset();
+  snapDot.isVisible=false; brushRing.isVisible=false;
+  document.getElementById("terrain-panel").style.display = m==="terrain"?"block":"none";
+  document.getElementById("road-panel").style.display    = m==="road"?"block":"none";
+  document.getElementById("zone-panel").style.display    = m==="zone"?"block":"none";
+  document.querySelectorAll("#hud button").forEach(function(b){ b.classList.remove("active","active-red"); });
+  var btn=document.getElementById("btn-"+m);
+  if (btn) btn.classList.add(m==="bulldoze"?"active-red":"active");
+  document.getElementById("mode-label").textContent="Mode: "+m;
+  var hints={ camera:"Camera — middle/right drag orbit/pan, scroll zoom", terrain:"Terrain — hold Shift + drag to sculpt", road:"Road — L-click start, L-click curve handle, R-click finish  (R after 1st click = straight)", zone:"Zone — click a plot  |  1 = residential  2 = commercial  3 = industrial", bulldoze:"Bulldoze — click a building to remove it" };
+  setInfo(hints[m]||"");
+}
+
+function setInfo(t){ document.getElementById("info").textContent=t; }
+function setBrush(m,btn){ brushMode=m; document.querySelectorAll(".tp-brushes button").forEach(function(b){b.classList.remove("sel");}); btn.classList.add("sel"); }
+function setRoadType(t,btn){ currentRoadType=t; document.querySelectorAll(".road-type-btn").forEach(function(b){b.classList.remove("sel");}); btn.classList.add("sel"); }
+function setZone(z,btn){ currentZone=z; document.querySelectorAll(".zone-btn").forEach(function(b){b.classList.remove("sel");}); btn.classList.add("sel"); }
+
+// ── Keyboard ─────────────────────────────────────────────────
+window.addEventListener("keydown", function(e) {
+  if (e.key==="Shift")  isShift=true;
+  if (e.key==="Escape") { rs.reset(); setMode("camera"); }
+  if (appMode==="zone") {
+    if (e.key==="1") { currentZone="residential"; setInfo("Zone: residential"); }
+    if (e.key==="2") { currentZone="commercial";  setInfo("Zone: commercial"); }
+    if (e.key==="3") { currentZone="industrial";  setInfo("Zone: industrial"); }
+  }
+});
+window.addEventListener("keyup", function(e) {
+  if (e.key==="Shift") { isShift=false; isPainting=false; }
+});
+
+// ── Pointer ──────────────────────────────────────────────────
+scene.onPointerMove = function() {
+  var hit=scene.pick(scene.pointerX, scene.pointerY, function(m){ return m.name==="terrain"; });
+  if (!hit.hit) return;
+  var wp=hit.pickedPoint;
+
+  if (appMode==="terrain") {
+    brushRing.isVisible=true; syncBrushRing(wp);
+    if (isShift && isMouseDown) applyBrush(wp);
+    return;
+  }
+  brushRing.isVisible=false;
+
+  if (appMode==="road") {
+    snapDot.isVisible=true;
+    var sn=snapToGrid(wp);
+    snapDot.position.x=sn.x; snapDot.position.y=wp.y+0.28; snapDot.position.z=sn.z;
+    if (rs.phase===1) rs.updatePreview(rs.A, sn, sn);
+    if (rs.phase===2) rs.updatePreview(rs.A, rs.B, sn);
+  } else {
+    snapDot.isVisible=false;
+  }
+};
+
+canvas.addEventListener("mousedown", function(e) {
+  isMouseDown=true;
+
+  if (appMode==="terrain" && isShift) {
+    var hit=scene.pick(scene.pointerX, scene.pointerY, function(m){ return m.name==="terrain"; });
+    if (hit.hit) { isPainting=true; applyBrush(hit.pickedPoint); }
+    return;
+  }
+
+  if (appMode!=="road") return;
+
+  var hit=scene.pick(scene.pointerX, scene.pointerY, function(m){ return m.name==="terrain"; });
+  if (!hit.hit) return;
+
+  if (e.button===2) {
+    if (rs.phase===1) {
+      // Straight road — midpoint as handle
+      var C=snapToGrid(hit.pickedPoint); C.y=hit.pickedPoint.y;
+      var mid=rs.A.add(C).scale(0.5);
+      buildRoad(rs.A, mid, C);
+      rs.reset();
+    } else if (rs.phase===2) {
+      // Curved road
+      var C=snapToGrid(hit.pickedPoint); C.y=hit.pickedPoint.y;
+      buildRoad(rs.A, rs.B, C);
+      rs.reset();
+    } else {
+      rs.reset();
+    }
+    return;
+  }
+
+  if (e.button===0) {
+    var sn=snapToGrid(hit.pickedPoint); sn.y=hit.pickedPoint.y;
+    if (rs.phase===0) {
+      var existing=nearestNode(sn,7);
+      rs.A=existing||sn; rs.phase=1;
+      rs.markerA=rs.placeMarker(rs.A);
+    } else if (rs.phase===1) {
+      rs.B=hit.pickedPoint.clone(); rs.phase=2;
+    }
+  }
+});
+
+canvas.addEventListener("mouseup",    function(){ isMouseDown=false; isPainting=false; });
+canvas.addEventListener("contextmenu", function(e){ e.preventDefault(); });
+
+document.getElementById("br").addEventListener("input", function(e){ brushRadius=parseFloat(e.target.value); document.getElementById("br-val").textContent=brushRadius; });
+document.getElementById("bs").addEventListener("input", function(e){ brushStr=parseFloat(e.target.value); document.getElementById("bs-val").textContent=brushStr.toFixed(2); });
+
+// ── Render loop ──────────────────────────────────────────────
+engine.runRenderLoop(function(){ scene.render(); });
+window.addEventListener("resize", function(){ engine.resize(); });
+setMode("camera");
+</script>
+</body>
+</html>
