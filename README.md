@@ -6,7 +6,8 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Contributions](https://img.shields.io/badge/contributions-welcome-brightgreen)
 
-**[▶ Play in browser](https://mattthebot.github.io/System-City/)** · [Report a bug](../../issues) · [Suggest a feature](../../issues) · [Join the discussion](../../discussions)
+**[▶ Play in browser](<a href="https://www.example.com" target="_blank" rel="noopener">https://mattthebot.github.io/System-City/</a>
+)** · [Report a bug](../../issues) · [Suggest a feature](../../issues) · [Join the discussion](../../discussions)
 
 ---
 
