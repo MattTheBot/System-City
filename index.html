@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>System City v0.2</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { overflow:hidden; background:#1a1a2e; font-family:system-ui,sans-serif; }
+    #c { width:100vw; height:100vh; display:block; }
+
+    #hud {
+      position:absolute; bottom:0; left:0; right:0; height:58px;
+      background:rgba(8,8,16,0.90); border-top:1px solid rgba(255,255,255,0.07);
+      display:flex; align-items:center; gap:8px; padding:0 16px;
+    }
+    #hud button {
+      background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.14);
+      color:#bbb; padding:6px 14px; border-radius:5px; cursor:pointer; font-size:12px;
+    }
+    #hud button:hover     { background:rgba(255,255,255,0.14); }
+    #hud button.active    { background:#1a4fa8; border-color:#4a8fd5; color:#fff; }
+    #hud button.active-rd { background:#6a1a1a; border-color:#c04040; color:#fff; }
+    #mode-lbl { font-size:12px; color:#666; min-width:80px; }
+    #ver      { margin-left:auto; font-size:11px; color:#333; }
+
+    .panel {
+      display:none; position:absolute; top:14px;
+      background:rgba(10,10,20,0.93); border:1px solid rgba(255,255,255,0.09);
+      border-radius:8px; padding:15px; color:#ccc; font-size:13px;
+    }
+    .panel h4 { margin:0 0 11px; font-size:13px; font-weight:500; color:#fff; }
+    #tp { right:14px; width:215px; }
+    #rp { left:14px; width:185px; }
+    #zp { left:14px; width:185px; }
+
+    .row { margin-bottom:10px; }
+    .lbl { display:flex; justify-content:space-between; font-size:11px; color:#888; margin-bottom:3px; }
+    .panel input[type=range] { width:100%; accent-color:#4a8fd5; }
+    .bgrid { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:5px; }
+    .bgrid button {
+      background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.11);
+      color:#aaa; padding:5px 0; border-radius:4px; cursor:pointer; font-size:11px;
+    }
+    .bgrid button.active { background:#1a4fa8; border-color:#4a8fd5; color:#fff; }
+    #exp-btn {
+      width:100%; margin-top:9px; padding:7px; background:#163d25;
+      border:1px solid #2a7a4a; color:#7fffc4; border-radius:5px; cursor:pointer; font-size:12px;
+    }
+
+    /* layer indicator */
+    #layer-box {
+      margin-top:10px; padding:8px 10px;
+      background:rgba(255,255,255,0.05); border-radius:4px;
+      border:1px solid rgba(255,255,255,0.08); font-size:11px;
+    }
+    #layer-box .lh { color:#888; margin-bottom:3px; }
+    #layer-val { color:#7fffc4; font-weight:500; font-size:13px; }
+    #layer-box .lhint { color:#444; font-size:10px; margin-top:4px; line-height:1.4; }
+
+    .hint { font-size:11px; color:#444; margin-top:8px; line-height:1.6; }
+    .zbtn {
+      display:block; width:100%; padding:7px 10px; margin-bottom:5px;
+      border-radius:4px; cursor:pointer; font-size:12px; text-align:left; border:1px solid;
+    }
+    .zr { background:rgba(40,140,50,0.2);  border-color:rgba(60,180,70,0.25);  color:#8fda98; }
+    .zc { background:rgba(30,80,180,0.2);  border-color:rgba(50,110,220,0.25); color:#8ab4f8; }
+    .zi { background:rgba(160,130,20,0.2); border-color:rgba(200,170,30,0.25); color:#f0cc55; }
+    .zbtn.active { filter:brightness(1.6); }
+
+    #info {
+      position:absolute; top:14px; left:50%; transform:translateX(-50%);
+      background:rgba(10,10,20,0.82); border:1px solid rgba(255,255,255,0.07);
+      border-radius:6px; padding:6px 15px; font-size:12px; color:#aaa;
+      pointer-events:none; white-space:nowrap;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <span id="mode-lbl">terrain</span>
+  <button id="btn-terrain"  onclick="setMode('terrain')">Terrain</button>
+  <button id="btn-road"     onclick="setMode('road')">Road</button>
+  <button id="btn-zone"     onclick="setMode('zone')">Zone</button>
+  <button id="btn-bulldoze" onclick="setMode('bulldoze')">Bulldoze</button>
+  <span id="ver">System City v0.2</span>
+</div>
+
+<div id="tp" class="panel">
+  <h4>Terrain editor</h4>
+  <div class="row">
+    <div class="lbl"><span>Radius</span><span id="br-v">12</span></div>
+    <input type="range" id="br" min="2" max="60" value="12"
+      oninput="brushRadius=+this.value;document.getElementById('br-v').textContent=this.value;rebuildCircle()">
+  </div>
+  <div class="row">
+    <div class="lbl"><span>Strength</span><span id="bs-v">0.50</span></div>
+    <input type="range" id="bs" min="0.05" max="3" step="0.05" value="0.5"
+      oninput="brushStr=+this.value;document.getElementById('bs-v').textContent=(+this.value).toFixed(2)">
+  </div>
+  <div class="row">
+    <div class="lbl"><span>Mode</span></div>
+    <div class="bgrid" id="bmodes">
+      <button class="active" onclick="setBrush('raise',this)">Raise</button>
+      <button onclick="setBrush('lower',this)">Lower</button>
+      <button onclick="setBrush('flatten',this)">Flatten</button>
+      <button onclick="setBrush('smooth',this)">Smooth</button>
+    </div>
+  </div>
+  <div id="layer-box">
+    <div class="lh">Target height (flatten)</div>
+    <div id="layer-val">not set</div>
+    <div class="lhint">
+      R-click terrain → sample height<br>
+      Flatten brush snaps to that level
+    </div>
+  </div>
+  <button id="exp-btn" onclick="exportHM()">Export heightmap PNG</button>
+  <div class="hint">Hold <b>Shift</b> + drag to sculpt.<br>Release Shift to orbit.</div>
+</div>
+
+<div id="rp" class="panel">
+  <h4>Road tool</h4>
+  <div class="hint" style="color:#555;line-height:1.9;">
+    <b style="color:#888">L-click</b> — place start<br>
+    <b style="color:#888">L-click</b> — set curve handle<br>
+    <b style="color:#888">R-click</b> — finish road<br>
+    <span style="color:#333;font-size:10px">R after 1st click = straight</span>
+  </div>
+</div>
+
+<div id="zp" class="panel">
+  <h4>Zone type</h4>
+  <button class="zbtn zr active" onclick="setZone('residential',this)">Residential [1]</button>
+  <button class="zbtn zc"        onclick="setZone('commercial',this)">Commercial [2]</button>
+  <button class="zbtn zi"        onclick="setZone('industrial',this)">Industrial [3]</button>
+  <div class="hint">Click a green plot to zone it.</div>
+</div>
+
+<div id="info">Terrain — hold Shift + drag to sculpt</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.44.0/babylon.js"></script>
+<script>
+
+// ─────────────────────────────────────────────────────
+// Guard: if Babylon CDN failed, show a clear message
+// and stop — don't let undefined errors cascade
+// ─────────────────────────────────────────────────────
+if (typeof BABYLON === "undefined") {
+  document.getElementById("info").textContent =
+    "Babylon.js failed to load — check your internet connection";
+  throw new Error("Babylon.js not loaded");
+}
+
+// ─────────────────────────────────────────────────────
+// ALL STATE — var (no let/const) so nothing is TDZ-unsafe
+// ─────────────────────────────────────────────────────
+var appMode      = "terrain";
+var brushMode    = "raise";
+var brushRadius  = 12;
+var brushStr     = 0.5;
+var isShift      = false;
+var isSculpting  = false;
+var curZone      = "residential";
+var flattenTarget = null;   // sampled height for flatten tool
+var roads        = [];
+var plots        = [];
+
+// cam is declared here so setMode can check it without crashing
+var cam = null;
+
+// rs — ALL methods assigned immediately, before engine init
+var rs = { phase:0, A:null, B:null, preview:null, markerA:null };
+
+rs.reset = function() {
+  rs.phase = 0; rs.A = null; rs.B = null;
+  if (rs.preview) { rs.preview.dispose(); rs.preview = null; }
+  if (rs.markerA) { rs.markerA.dispose(); rs.markerA = null; }
+};
+
+// These reference BABYLON/scene — only callable after engine init
+// but they are ASSIGNED here so rs is always a complete object
+rs.placeMarker = function(pos) {
+  var m  = BABYLON.MeshBuilder.CreateSphere("nodeA", { diameter:2.4 }, scene);
+  m.position = pos.clone(); m.position.y += 1.2; m.isPickable = false;
+  var mat = new BABYLON.StandardMaterial("nodeAmat", scene);
+  mat.diffuseColor  = new BABYLON.Color3(0.2, 0.6, 1.0);
+  mat.emissiveColor = new BABYLON.Color3(0.05, 0.2, 0.5);
+  m.material = mat; return m;
+};
+
+rs.updatePreview = function(A, handle, end) {
+  if (rs.preview) { rs.preview.dispose(); rs.preview = null; }
+  if (A.subtract(end).length() < 0.5) return;
+  var curve = BABYLON.Curve3.CreateQuadraticBezier(A, handle, end, 30);
+  rs.preview = BABYLON.MeshBuilder.CreateTube("roadPreview", {
+    path: curve.getPoints(), radius: 2.5, tessellation: 6
+  }, scene);
+  rs.preview.isPickable = false;
+  var pm = new BABYLON.StandardMaterial("rpmat", scene);
+  pm.diffuseColor = new BABYLON.Color3(0.3, 0.5, 0.9); pm.alpha = 0.45;
+  rs.preview.material = pm;
+};
+
+// ─────────────────────────────────────────────────────
+// ENGINE, SCENE, CAMERA, LIGHTS
+// ─────────────────────────────────────────────────────
+var canvas = document.getElementById("c");
+var engine = new BABYLON.Engine(canvas, true);
+var scene  = new BABYLON.Scene(engine);
+scene.clearColor = new BABYLON.Color4(0.52, 0.71, 0.87, 1);
+
+// cam assigned to the outer var declared above
+cam = new BABYLON.ArcRotateCamera("cam", -Math.PI/2, Math.PI/3, 130,
+  BABYLON.Vector3.Zero(), scene);
+cam.attachControl(canvas, true);
+cam.lowerRadiusLimit     = 8;
+cam.upperRadiusLimit     = 450;
+cam.lowerBetaLimit       = 0.15;
+cam.upperBetaLimit       = 1.48;
+cam.panningSensibility   = 50;
+cam.wheelDeltaPercentage = 0.012;
+
+var sun = new BABYLON.DirectionalLight("sun", new BABYLON.Vector3(-1,-2,-1), scene);
+sun.intensity = 1.1; sun.position = new BABYLON.Vector3(80,150,80);
+var amb = new BABYLON.HemisphericLight("amb", new BABYLON.Vector3(0,1,0), scene);
+amb.intensity = 0.5;
+
+// ─────────────────────────────────────────────────────
+// TERRAIN
+// ─────────────────────────────────────────────────────
+var TS = 512, TG = 150;
+
+var terrain = BABYLON.MeshBuilder.CreateGround("terrain", {
+  width:TS, height:TS, subdivisions:TG, updatable:true
+}, scene);
+var tMat = new BABYLON.StandardMaterial("tmat", scene);
+tMat.diffuseColor  = new BABYLON.Color3(0.27, 0.52, 0.17);
+tMat.specularColor = new BABYLON.Color3(0.03, 0.03, 0.03);
+terrain.material   = tMat;
+
+function getV() { return terrain.getVerticesData(BABYLON.VertexBuffer.PositionKind); }
+function setV(v) {
+  terrain.updateVerticesData(BABYLON.VertexBuffer.PositionKind, v);
+  terrain.createNormals(false);
+}
+
+// ─────────────────────────────────────────────────────
+// BRUSH MATHS
+// ─────────────────────────────────────────────────────
+function applyBrush(hp) {
+  var v  = getV();
+  var hx = hp.x, hz = hp.z, hy = hp.y;
+  var rL = (TG + 1) * 3;
+  var i, j, n, dx, dz, d, fo, dt, nb, sum, cnt;
+
+  // For flatten: use sampled target height if set, else use click height
+  var flatY = (brushMode === "flatten" && flattenTarget !== null) ? flattenTarget : hy;
+
+  if (brushMode === "smooth") {
+    var cp = v.slice();
+    for (i = 0; i < v.length; i += 3) {
+      dx = v[i]-hx; dz = v[i+2]-hz;
+      d  = Math.sqrt(dx*dx+dz*dz); if (d>brushRadius) continue;
+      fo = 1-d/brushRadius;
+      nb = [i-3,i+3,i-rL,i+rL]; sum = cp[i+1]; cnt = 1;
+      for (j=0;j<4;j++){n=nb[j];if(n>=0&&n<cp.length){sum+=cp[n+1];cnt++;}}
+      v[i+1] += ((sum/cnt)-v[i+1]) * fo * brushStr * 0.4;
+    }
+  } else {
+    for (i = 0; i < v.length; i += 3) {
+      dx = v[i]-hx; dz = v[i+2]-hz;
+      d  = Math.sqrt(dx*dx+dz*dz); if (d>brushRadius) continue;
+      fo = 1-d/brushRadius; dt = brushStr*fo;
+      if (brushMode === "raise")   v[i+1] += dt;
+      if (brushMode === "lower")   v[i+1] -= dt;
+      if (brushMode === "flatten") v[i+1] += (flatY-v[i+1]) * fo * 0.25;
+      v[i+1] = Math.max(-30, Math.min(80, v[i+1]));
+    }
+  }
+  setV(v);
+}
+
+function sampleHeight(hp) {
+  // Sample terrain height at click point, snap to 0.5m grid
+  var raw     = hp.y;
+  var snapped = Math.round(raw / 0.5) * 0.5;
+  flattenTarget = snapped;
+  document.getElementById("layer-val").textContent = snapped.toFixed(1) + " m";
+}
+
+function exportHM() {
+  var sz=TG+1, v=getV();
+  var cv=document.createElement("canvas"); cv.width=cv.height=sz;
+  var ctx=cv.getContext("2d"), img=ctx.createImageData(sz,sz);
+  var mn=Infinity,mx=-Infinity;
+  for(var i=1;i<v.length;i+=3){if(v[i]<mn)mn=v[i];if(v[i]>mx)mx=v[i];}
+  var rng=mx-mn||1;
+  for(var r=0;r<sz;r++)for(var c=0;c<sz;c++){
+    var vi=(r*sz+c)*3, pv=Math.round(((v[vi+1]-mn)/rng)*255);
+    var pi=(r*sz+c)*4; img.data[pi]=img.data[pi+1]=img.data[pi+2]=pv; img.data[pi+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  var a=document.createElement("a"); a.download="heightmap.png"; a.href=cv.toDataURL(); a.click();
+}
+
+// ─────────────────────────────────────────────────────
+// BRUSH CIRCLE — CreateLines in XZ (always flat)
+// ─────────────────────────────────────────────────────
+var brushCircle = null;
+var red4 = new BABYLON.Color4(1, 0.25, 0.25, 1);
+
+function rebuildCircle() {
+  if (brushCircle) { brushCircle.dispose(); brushCircle = null; }
+  var pts = [], cols = [];
+  for (var i=0; i<=48; i++) {
+    var a = (i/48)*Math.PI*2;
+    pts.push(new BABYLON.Vector3(Math.cos(a)*brushRadius, 0, Math.sin(a)*brushRadius));
+    cols.push(red4);
+  }
+  brushCircle = BABYLON.MeshBuilder.CreateLines("bc", { points:pts, colors:cols }, scene);
+  brushCircle.isPickable = false;
+  brushCircle.isVisible  = false;
+}
+rebuildCircle();
+
+// ─────────────────────────────────────────────────────
+// GRID SNAP + SNAP DOT
+// ─────────────────────────────────────────────────────
+var GRID = 8;
+function snap(p) {
+  return new BABYLON.Vector3(
+    Math.round(p.x/GRID)*GRID, p.y, Math.round(p.z/GRID)*GRID
+  );
+}
+
+var snapDot = BABYLON.MeshBuilder.CreateDisc("sd", { radius:1.4, tessellation:16 }, scene);
+snapDot.rotation.x    = Math.PI/2;
+snapDot.isPickable    = false;
+snapDot.isVisible     = false;
+var sdMat = new BABYLON.StandardMaterial("sdmat", scene);
+sdMat.diffuseColor    = new BABYLON.Color3(1, 0.9, 0.1);
+sdMat.emissiveColor   = new BABYLON.Color3(0.5, 0.45, 0);
+sdMat.backFaceCulling = false;
+snapDot.material      = sdMat;
+
+// ─────────────────────────────────────────────────────
+// ROAD BUILD
+// ─────────────────────────────────────────────────────
+var ROAD_W=5, PLT_D=14, PLT_OFF=6;
+
+function nearNode(pos, thr) {
+  for(var i=0;i<roads.length;i++){
+    var pts=[roads[i].A,roads[i].C];
+    for(var j=0;j<2;j++){
+      if(pts[j]&&BABYLON.Vector3.Distance(pos,pts[j])<thr) return pts[j].clone();
+    }
+  }
+  return null;
+}
+
+function buildRoad(A, handle, C) {
+  var curve = BABYLON.Curve3.CreateQuadraticBezier(A, handle, C, 48);
+  var pts   = curve.getPoints();
+
+  var mesh = BABYLON.MeshBuilder.CreateTube("road"+roads.length,{
+    path:pts, radius:ROAD_W/2, tessellation:8
+  },scene);
+  mesh.isPickable = false;
+  var rm = new BABYLON.StandardMaterial("rm"+roads.length, scene);
+  rm.diffuseColor  = new BABYLON.Color3(0.18,0.18,0.18);
+  rm.specularColor = new BABYLON.Color3(0.03,0.03,0.03);
+  mesh.material = rm;
+
+  var dm = new BABYLON.StandardMaterial("dm"+roads.length, scene);
+  dm.diffuseColor  = new BABYLON.Color3(1,1,1);
+  dm.emissiveColor = new BABYLON.Color3(0.35,0.35,0.35);
+  for(var i=3;i<pts.length-3;i+=5){
+    var p=pts[i], nx=pts[Math.min(i+1,pts.length-1)];
+    var dir=nx.subtract(p).normalize();
+    var d=BABYLON.MeshBuilder.CreateBox("dash"+i,{width:0.3,depth:1.5,height:0.06},scene);
+    d.position=p.clone(); d.position.y+=0.22;
+    d.rotation.y=Math.atan2(dir.x,dir.z);
+    d.isPickable=false; d.material=dm;
+  }
+
+  var road={id:roads.length,A:A,handle:handle,C:C,curve:pts,plots:[]};
+  generatePlots(road);
+  roads.push(road);
+}
+
+// ─────────────────────────────────────────────────────
+// PLOTS
+// ─────────────────────────────────────────────────────
+function generatePlots(road) {
+  var pts=road.curve;
+  for(var i=4;i<pts.length-4;i+=4){
+    var p=pts[i],nx=pts[Math.min(i+1,pts.length-1)];
+    var dir=nx.subtract(p).normalize();
+    var perp=new BABYLON.Vector3(-dir.z,0,dir.x);
+    var ang=Math.atan2(dir.x,dir.z);
+    for(var s=0;s<2;s++){
+      var side=s===0?1:-1;
+      var ctr=p.add(perp.scale(side*(PLT_OFF+PLT_D/2)));
+      ctr.y=0.1;
+      spawnPlot(ctr,ang,road);
+    }
+  }
+}
+
+function spawnPlot(pos,angle,road){
+  var box=BABYLON.MeshBuilder.CreateBox("plot"+plots.length,{
+    width:GRID,depth:PLT_D,height:0.18
+  },scene);
+  box.position=pos.clone(); box.rotation.y=angle;
+  var pm=new BABYLON.StandardMaterial("pm"+plots.length,scene);
+  pm.diffuseColor=new BABYLON.Color3(0.52,0.80,0.38); pm.alpha=0.62;
+  box.material=pm;
+  var plot={id:plots.length,mesh:box,zone:null,building:null,road:road};
+  plots.push(plot); road.plots.push(plot);
+  (function(pl){
+    pl.mesh.actionManager=new BABYLON.ActionManager(scene);
+    pl.mesh.actionManager.registerAction(
+      new BABYLON.ExecuteCodeAction(BABYLON.ActionManager.OnPickTrigger,function(){
+        if(appMode==="zone")     zonePlot(pl);
+        if(appMode==="bulldoze") bulldozePlot(pl);
+      })
+    );
+  })(plot);
+}
+
+var ZCOL={
+  residential:new BABYLON.Color3(0.25,0.72,0.28),
+  commercial: new BABYLON.Color3(0.20,0.45,0.85),
+  industrial: new BABYLON.Color3(0.85,0.72,0.15),
+};
+
+function zonePlot(p){
+  if(p.zone)return;
+  p.zone=curZone;
+  p.mesh.material.diffuseColor=ZCOL[curZone];
+  p.mesh.material.alpha=0.88;
+  spawnBuilding(p);
+}
+
+function spawnBuilding(plot){
+  var h=curZone==="residential"?3+Math.random()*7:curZone==="commercial"?6+Math.random()*20:4+Math.random()*6;
+  var b=BABYLON.MeshBuilder.CreateBox("bld"+plot.id,{width:GRID*0.6,depth:PLT_D*0.5,height:h},scene);
+  b.position=plot.mesh.position.clone(); b.position.y=h/2+0.18;
+  b.rotation.y=plot.mesh.rotation.y; b.isPickable=false;
+  var bm=new BABYLON.StandardMaterial("bm"+plot.id,scene);
+  var r=Math.random;
+  if(curZone==="residential") bm.diffuseColor=new BABYLON.Color3(0.82+r()*0.12,0.78+r()*0.10,0.70+r()*0.12);
+  if(curZone==="commercial")  bm.diffuseColor=new BABYLON.Color3(0.50+r()*0.20,0.60+r()*0.20,0.78+r()*0.15);
+  if(curZone==="industrial")  bm.diffuseColor=new BABYLON.Color3(0.58+r()*0.10,0.53+r()*0.10,0.46+r()*0.10);
+  bm.specularColor=new BABYLON.Color3(0.04,0.04,0.04);
+  b.material=bm; plot.building=b;
+}
+
+function bulldozePlot(p){
+  if(p.building){p.building.dispose();p.building=null;}
+  p.zone=null;
+  p.mesh.material.diffuseColor=new BABYLON.Color3(0.52,0.80,0.38);
+  p.mesh.material.alpha=0.62;
+}
+
+// ─────────────────────────────────────────────────────
+// MODE MANAGEMENT
+// NOTE: NO cam.attachControl here — cam may be null
+//       during button click if engine failed.
+//       Camera attach/detach ONLY in keydown/keyup.
+// ─────────────────────────────────────────────────────
+var HINTS={
+  terrain:  "Terrain — hold Shift + drag to sculpt  |  R-click to sample height",
+  road:     "Road — L-click start  •  L-click curve  •  R-click finish",
+  zone:     "Zone — click a green plot  |  keys 1 2 3",
+  bulldoze: "Bulldoze — click a building",
+};
+
+function setMode(m){
+  appMode=m;
+  rs.reset();
+  isSculpting=false;
+
+  // Hide visuals
+  if(snapDot)    snapDot.isVisible=false;
+  if(brushCircle) brushCircle.isVisible=false;
+
+  // Panels
+  document.getElementById("tp").style.display=(m==="terrain")?"block":"none";
+  document.getElementById("rp").style.display=(m==="road")?"block":"none";
+  document.getElementById("zp").style.display=(m==="zone")?"block":"none";
+
+  // Buttons
+  ["terrain","road","zone","bulldoze"].forEach(function(x){
+    var b=document.getElementById("btn-"+x); if(!b)return;
+    b.classList.remove("active","active-rd");
+    if(x===m) b.classList.add(m==="bulldoze"?"active-rd":"active");
+  });
+
+  document.getElementById("mode-lbl").textContent=m;
+  document.getElementById("info").textContent=HINTS[m]||"";
+}
+
+function setBrush(m,btn){
+  brushMode=m;
+  document.querySelectorAll("#bmodes button").forEach(function(b){b.classList.remove("active");});
+  btn.classList.add("active");
+}
+
+function setZone(z,btn){
+  curZone=z;
+  document.querySelectorAll(".zbtn").forEach(function(b){b.classList.remove("active");});
+  btn.classList.add("active");
+}
+
+// ─────────────────────────────────────────────────────
+// KEYBOARD
+// Camera detach/attach ONLY here — cam is always valid
+// by the time any key can be pressed
+// ─────────────────────────────────────────────────────
+document.addEventListener("keydown",function(e){
+  if(e.key==="Shift"){
+    isShift=true;
+    if(appMode==="terrain" && cam) cam.detachControl(canvas);
+  }
+  if(e.key==="Escape"){ rs.reset(); setMode("terrain"); }
+  if(appMode==="zone"){
+    if(e.key==="1") setZone("residential",document.querySelector(".zr"));
+    if(e.key==="2") setZone("commercial", document.querySelector(".zc"));
+    if(e.key==="3") setZone("industrial", document.querySelector(".zi"));
+  }
+});
+
+document.addEventListener("keyup",function(e){
+  if(e.key==="Shift"){
+    isShift=false; isSculpting=false;
+    if(cam) cam.attachControl(canvas,true);
+  }
+});
+
+// ─────────────────────────────────────────────────────
+// POINTER EVENTS (Babylon's own system)
+// ─────────────────────────────────────────────────────
+function pickTerrain(){
+  return scene.pick(scene.pointerX,scene.pointerY,function(m){return m.name==="terrain";});
+}
+
+scene.onPointerMove=function(){
+  var hit=pickTerrain(); if(!hit||!hit.hit)return;
+  var wp=hit.pickedPoint;
+
+  if(appMode==="terrain"){
+    if(brushCircle){brushCircle.isVisible=true;brushCircle.position.set(wp.x,wp.y+0.25,wp.z);}
+    if(isShift&&isSculpting) applyBrush(wp);
+    return;
+  }
+  if(brushCircle) brushCircle.isVisible=false;
+
+  if(appMode==="road"){
+    if(snapDot){
+      var sn=snap(wp);
+      snapDot.isVisible=true;
+      snapDot.position.set(sn.x,wp.y+0.3,sn.z);
+    }
+    if(rs.phase===1) rs.updatePreview(rs.A,snap(wp),snap(wp));
+    if(rs.phase===2) rs.updatePreview(rs.A,rs.B,snap(wp));
+  } else {
+    if(snapDot) snapDot.isVisible=false;
+  }
+};
+
+scene.onPointerDown=function(evt){
+  // ── terrain ─────────────────────────────────────
+  if(appMode==="terrain"){
+    var hit=pickTerrain(); if(!hit||!hit.hit)return;
+    if(evt.button===2){
+      // Right-click: sample height for flatten target
+      sampleHeight(hit.pickedPoint);
+      return;
+    }
+    if(evt.button===0 && isShift){
+      isSculpting=true;
+      applyBrush(hit.pickedPoint);
+      return;
+    }
+    return;
+  }
+
+  // ── road ────────────────────────────────────────
+  if(appMode==="road"){
+    var hit=pickTerrain(); if(!hit||!hit.hit)return;
+
+    if(evt.button===2){
+      var C=snap(hit.pickedPoint); C.y=hit.pickedPoint.y;
+      if(rs.phase===1){
+        var mid=new BABYLON.Vector3((rs.A.x+C.x)*0.5,(rs.A.y+C.y)*0.5,(rs.A.z+C.z)*0.5);
+        buildRoad(rs.A,mid,C); rs.reset();
+      } else if(rs.phase===2){
+        buildRoad(rs.A,rs.B,C); rs.reset();
+      } else { rs.reset(); }
+      return;
+    }
+
+    if(evt.button===0){
+      var sn=snap(hit.pickedPoint); sn.y=hit.pickedPoint.y;
+      if(rs.phase===0){
+        rs.A=nearNode(sn,7)||sn; rs.phase=1;
+        rs.markerA=rs.placeMarker(rs.A);
+      } else if(rs.phase===1){
+        rs.B=hit.pickedPoint.clone(); rs.phase=2;
+      }
+    }
+    return;
+  }
+};
+
+scene.onPointerUp=function(){
+  isSculpting=false;
+};
+
+canvas.addEventListener("contextmenu",function(e){e.preventDefault();});
+
+// ─────────────────────────────────────────────────────
+// RENDER LOOP
+// ─────────────────────────────────────────────────────
+engine.runRenderLoop(function(){ scene.render(); });
+window.addEventListener("resize",function(){ engine.resize(); });
+
+setMode("terrain");
+
+</script>
+</body>
+</html>
