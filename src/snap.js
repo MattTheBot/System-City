@@ -1,15 +1,19 @@
 // ─────────────────────────────────────────────────────
-//  snap.js  —  road snapping
+//  snap.js
 //
-//  All snap functions return plain Vector3 values.
-//  Node references are retrieved separately via
-//  snapStartNode() / snapEndNode() so there is no
-//  {pos, node} object confusion anywhere.
+//  NODE SNAP RULES:
+//    - ALL nodes (including mid-road ones) can be snapped to.
+//      This prevents roads crossing without connecting.
+//    - NODE_SNAP_DIST is large enough that you physically
+//      cannot draw a road across another without hitting a node.
+//    - Endpoint nodes (isMid=false) are preferred for junctions.
+//    - Mid nodes can be snapped to start/end a road but don't
+//      become junction nodes — they just enforce the connection.
 // ─────────────────────────────────────────────────────
 
 var UNIT           = 8;
-var NODE_SNAP_DIST = UNIT * 0.65;    // 5.2m — hard lock radius
-var NODE_SHOW_DIST = UNIT * 3.0;     // 24m  — visibility radius
+var NODE_SNAP_DIST = UNIT * 0.85;     // 6.8m — large enough to block road-crossing
+var NODE_SHOW_DIST = UNIT * 3.5;      // 28m — visibility radius
 var ANGLE_SOFT_DEG = 6 * Math.PI / 180;
 
 // ── Terrain height via downward ray ──────────────────
@@ -24,48 +28,60 @@ function terrainYAt(x, z) {
   return (hit && hit.hit) ? hit.pickedPoint.y : 0;
 }
 
-// ── Find nearest connectable (non-mid) snap node ─────
-function nearestConnectableNode(pos, threshold) {
+// ── Find nearest snap node within threshold ───────────
+// Checks ALL nodes — both endpoint and mid.
+// Prefers endpoint nodes (isMid=false) if one is equally close.
+function nearestNode(pos, threshold) {
   if (typeof snapNodes === "undefined") return null;
-  var best = null, bestDist = threshold;
+  var bestEndpoint = null, bestEndDist = threshold;
+  var bestMid      = null, bestMidDist = threshold;
+
   for (var i = 0; i < snapNodes.length; i++) {
     var n = snapNodes[i];
-    if (n.isMid) continue;
     var d = BABYLON.Vector3.Distance(pos, n.position);
-    if (d < bestDist) { bestDist = d; best = n; }
+    if (d >= threshold) continue;
+
+    if (!n.isMid) {
+      if (d < bestEndDist) { bestEndDist = d; bestEndpoint = n; }
+    } else {
+      if (d < bestMidDist) { bestMidDist = d; bestMid = n; }
+    }
   }
-  return best;
+
+  // Prefer endpoint nodes — they become junctions
+  return bestEndpoint || bestMid;
 }
 
-// ── snapStart: position for road start ───────────────
-// Returns Vector3. Hard-locks to nearby node, else free.
+// ── snapStart ─────────────────────────────────────────
+// Position for road start. Hard-locks to any nearby node.
 function snapStart(rawCursor) {
-  var node = nearestConnectableNode(rawCursor, NODE_SNAP_DIST);
+  var node = nearestNode(rawCursor, NODE_SNAP_DIST);
   if (node) return node.position.clone();
   var p = rawCursor.clone();
   p.y   = terrainYAt(rawCursor.x, rawCursor.z);
   return p;
 }
 
-// ── snapStartNode: which node we locked to (or null) ─
+// Which node we snapped to at start (or null)
 function snapStartNode(rawCursor) {
-  return nearestConnectableNode(rawCursor, NODE_SNAP_DIST);
+  return nearestNode(rawCursor, NODE_SNAP_DIST);
 }
 
-// ── snapEnd: position for road end ───────────────────
-// Node snap overrides length snap if close to a node.
+// ── snapEnd ───────────────────────────────────────────
+// Position for road end. Node snap overrides length snap.
 function snapEnd(A, rawCursor) {
-  var node = nearestConnectableNode(rawCursor, NODE_SNAP_DIST);
+  var node = nearestNode(rawCursor, NODE_SNAP_DIST);
   if (node) return node.position.clone();
   return snapLength(A, rawCursor);
 }
 
-// ── snapEndNode ───────────────────────────────────────
+// Which node we snapped to at end (or null)
 function snapEndNode(A, rawCursor) {
-  return nearestConnectableNode(rawCursor, NODE_SNAP_DIST);
+  return nearestNode(rawCursor, NODE_SNAP_DIST);
 }
 
-// ── snapLength: free direction, whole-unit length ────
+// ── snapLength ────────────────────────────────────────
+// Free direction, whole-unit distance, terrain Y.
 function snapLength(A, rawCursor) {
   var dx  = rawCursor.x - A.x;
   var dz  = rawCursor.z - A.z;
@@ -74,7 +90,6 @@ function snapLength(A, rawCursor) {
 
   var nx = dx / len, nz = dz / len;
 
-  // Soft angle snap
   var rawAngle  = Math.atan2(nx, nz);
   var cands     = getCandidateAngles(A);
   var bestAngle = rawAngle, bestDiff = Infinity;
@@ -92,15 +107,14 @@ function snapLength(A, rawCursor) {
   return new BABYLON.Vector3(ex, terrainYAt(ex, ez), ez);
 }
 
-// Integer unit count for HUD
+// Integer unit count for HUD display
 function snapUnits(A, rawCursor) {
   var dx  = rawCursor.x - A.x;
   var dz  = rawCursor.z - A.z;
-  var len = Math.sqrt(dx * dx + dz * dz);
-  return Math.max(1, Math.round(len / UNIT));
+  return Math.max(1, Math.round(Math.sqrt(dx*dx + dz*dz) / UNIT));
 }
 
-// ── Candidate angles for soft snap ───────────────────
+// Candidate angles for soft snap (road-relative or cardinal)
 function getCandidateAngles(fromPos) {
   if (typeof snapNodes !== "undefined") {
     for (var i = 0; i < snapNodes.length; i++) {
@@ -114,8 +128,9 @@ function getCandidateAngles(fromPos) {
         var idx  = Math.min(n.curveIndex, pts.length - 1);
         var prev = pts[Math.max(0, idx - 1)];
         var next = pts[Math.min(pts.length - 1, idx + 1)];
-        var tang = next.subtract(prev).normalize();
-        return makeAngles(Math.atan2(tang.x, tang.z));
+        return makeAngles(Math.atan2(
+          next.x - prev.x, next.z - prev.z
+        ));
       }
     }
   }
