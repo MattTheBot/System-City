@@ -8,7 +8,6 @@
 <body>
 <canvas id="c"></canvas>
 
-<!-- ── HUD ─────────────────────────────────────── -->
 <div id="hud">
   <span id="mode-lbl">terrain</span>
   <span class="sep"></span>
@@ -18,7 +17,6 @@
   <span id="ver">System City v0.3</span>
 </div>
 
-<!-- ── Terrain panel ────────────────────────────── -->
 <div id="tp" class="panel">
   <h4>Terrain editor</h4>
   <div class="row">
@@ -61,13 +59,12 @@
   <div class="layer-box">
     <div class="lh">Flatten target height</div>
     <div id="layer-val">not set</div>
-    <div class="lhint">R-click terrain to sample height.<br>Snaps to nearest 0.5 m.</div>
+    <div class="lhint">R-click terrain to sample.<br>Snaps to nearest 0.5 m.</div>
   </div>
   <button id="exp-btn" onclick="exportHM()">Export heightmap PNG</button>
   <div class="hint">Hold <b>Shift</b> + drag to sculpt.<br>Release Shift to orbit.</div>
 </div>
 
-<!-- ── Road panel ───────────────────────────────── -->
 <div id="rp" class="panel">
   <h4>Road tool</h4>
   <div class="road-stat">
@@ -78,42 +75,41 @@
     <b>L-click</b> — curve handle<br>
     <b>R-click</b> — finish<br>
     <span style="font-size:10px;color:#222">
-      R after 1st click = straight<br>
-      Snaps to nodes on nearby roads.<br>
-      Length snaps to 8 m units.
+      Snap nodes appear near cursor.<br>
+      Blue = connectable. Yellow = will snap.<br>
+      Orange = junction (2+ roads meet).
     </span>
   </div>
-  <div id="model-status" style="margin-top:10px">Loading road model…</div>
+  <div id="model-status" style="margin-top:10px;font-size:10px;color:#3a6a3a">Loading road model…</div>
 </div>
 
 <div id="info">Select a tool</div>
 
-<!-- ── Debug panel (Shift+Alt+D to toggle) ──────── -->
 <div id="debug-panel">
   <div id="debug-header">
-    <span>Debug console — Shift+Alt+D to close</span>
-    <button onclick="toggleDebug()">✕ close</button>
+    <span>Debug — Shift+Alt+D to toggle</span>
+    <button onclick="toggleDebug()">✕</button>
   </div>
   <div id="debug-stats">—</div>
   <div id="debug-log"></div>
 </div>
 
 <!--
-  Load order:
-    1. babylon.js       engine
-    2. babylon.loaders  GLB/glTF support (needed for road model)
-    3. core.js          engine, scene, camera (middle+right mouse only), lights
-    4. snap.js          UNIT, terrainYAt, snapStart/End/Length, node queries
-    5. terrain.js       terrain mesh, brush, colours, snapDot, brushCircle
-    6. roads.js         roads[], snapNodes[], rs, buildRoad — GLB auto-loaded at bottom
-    7. tools.js         TOOLS registry, all tool defs, pointer+keyboard routing, debug overlay
+  LOAD ORDER — dependencies flow strictly forward:
+    1. babylon.js        core engine
+    2. babylon.loaders   GLB/glTF format support (must be before any scene init)
+    3. core.js           engine, scene, cam (middle+right mouse), lights, pickTerrain
+    4. snap.js           UNIT, terrainYAt, snapStart/End/Node/Length/Units
+    5. terrain.js        terrain mesh, brush, colours, rebuildCircle, snapDot, setBrush
+    6. roads.js          roads[], snapNodes[], rs, buildRoad — GLB loaded at bottom
+    7. tools.js          TOOLS registry, all defs, pointer/keyboard routing, debug
 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.44.0/babylon.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs.loaders/6.44.0/babylonjs.loaders.min.js"></script>
 <script>
   if (typeof BABYLON === "undefined") {
-    document.getElementById("info").textContent = "Babylon.js failed to load — check connection";
-    throw new Error("Babylon.js not loaded");
+    document.getElementById("info").textContent = "Babylon.js failed to load";
+    throw new Error("Babylon not loaded");
   }
 </script>
 <script src="src/core.js"></script>
