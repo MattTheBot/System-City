@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>System City v0.3</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <span id="mode-lbl">terrain</span>
+  <span class="sep"></span>
+  <button id="btn-terrain"  onclick="activateTool('terrain')">Terrain [T]</button>
+  <button id="btn-road"     onclick="activateTool('road')">Road [R]</button>
+  <button id="btn-bulldoze" onclick="activateTool('bulldoze')">Bulldoze [X]</button>
+  <span id="ver">System City v0.3</span>
+</div>
+
+<div id="tp" class="panel">
+  <h4>Terrain editor</h4>
+  <div class="row">
+    <div class="lbl"><span>Radius</span><span id="br-v">12</span></div>
+    <input type="range" id="br" min="2" max="60" value="12" step="1"
+      oninput="brushRadius=+this.value;document.getElementById('br-v').textContent=this.value;rebuildCircle()">
+  </div>
+  <div class="row">
+    <div class="lbl"><span>Strength</span><span id="bs-v">0.50</span></div>
+    <input type="range" id="bs" min="0.05" max="3" step="0.05" value="0.5"
+      oninput="brushStr=+this.value;document.getElementById('bs-v').textContent=(+this.value).toFixed(2)">
+  </div>
+  <div class="row">
+    <div class="lbl"><span>Brush mode</span></div>
+    <div class="bgrid" id="bmodes">
+      <button class="active" onclick="setBrush('raise',this)">Raise</button>
+      <button onclick="setBrush('lower',this)">Lower</button>
+      <button onclick="setBrush('flatten',this)">Flatten</button>
+      <button onclick="setBrush('smooth',this)">Smooth</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl"><span>Raise ceiling</span></div>
+    <div class="target-row">
+      <label>Stop at:</label>
+      <input type="number" id="raise-target" placeholder="none" step="0.5"
+        oninput="setRaiseTarget(this.value)">
+      <button onclick="document.getElementById('raise-target').value='';setRaiseTarget('')">✕</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="lbl"><span>Lower floor</span></div>
+    <div class="target-row">
+      <label>Stop at:</label>
+      <input type="number" id="lower-target" placeholder="none" step="0.5"
+        oninput="setLowerTarget(this.value)">
+      <button onclick="document.getElementById('lower-target').value='';setLowerTarget('')">✕</button>
+    </div>
+  </div>
+  <div class="layer-box">
+    <div class="lh">Flatten target height</div>
+    <div id="layer-val">not set</div>
+    <div class="lhint">R-click terrain to sample.<br>Snaps to nearest 0.5 m.</div>
+  </div>
+  <button id="exp-btn" onclick="exportHM()">Export heightmap PNG</button>
+  <div class="hint">Hold <b>Shift</b> + drag to sculpt.<br>Release Shift to orbit.</div>
+</div>
+
+<div id="rp" class="panel">
+  <h4>Road tool</h4>
+  <div class="road-stat">
+    <span>Length</span><span id="road-len">—</span>
+  </div>
+  <div class="hint" style="color:#333;line-height:1.9">
+    <b>L-click</b> — start<br>
+    <b>L-click</b> — curve handle<br>
+    <b>R-click</b> — finish<br>
+    <span style="font-size:10px;color:#222">
+      Snap nodes appear near cursor.<br>
+      Blue = connectable. Yellow = will snap.<br>
+      Orange = junction (2+ roads meet).
+    </span>
+  </div>
+  <div id="model-status" style="margin-top:10px;font-size:10px;color:#3a6a3a">Loading road model…</div>
+</div>
+
+<div id="info">Select a tool</div>
+
+<div id="debug-panel">
+  <div id="debug-header">
+    <span>Debug — Shift+Alt+D to toggle</span>
+    <button onclick="toggleDebug()">✕</button>
+  </div>
+  <div id="debug-stats">—</div>
+  <div id="debug-log"></div>
+</div>
+
+<!--
+  LOAD ORDER — dependencies flow strictly forward:
+    1. babylon.js        core engine
+    2. babylon.loaders   GLB/glTF format support (must be before any scene init)
+    3. core.js           engine, scene, cam (middle+right mouse), lights, pickTerrain
+    4. snap.js           UNIT, terrainYAt, snapStart/End/Node/Length/Units
+    5. terrain.js        terrain mesh, brush, colours, rebuildCircle, snapDot, setBrush
+    6. roads.js          roads[], snapNodes[], rs, buildRoad — GLB loaded at bottom
+    7. tools.js          TOOLS registry, all defs, pointer/keyboard routing, debug
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.44.0/babylon.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs.loaders/6.44.0/babylonjs.loaders.min.js"></script>
+<script>
+  if (typeof BABYLON === "undefined") {
+    document.getElementById("info").textContent = "Babylon.js failed to load";
+    throw new Error("Babylon not loaded");
+  }
+</script>
+<script src="src/core.js"></script>
+<script src="src/snap.js"></script>
+<script src="src/terrain.js"></script>
+<script src="src/roads.js"></script>
+<script src="src/tools.js"></script>
+<script>
+  engine.runRenderLoop(function() { scene.render(); });
+  window.addEventListener("resize", function() { engine.resize(); });
+  activateTool("terrain");
+</script>
+</body>
+</html>
