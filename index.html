@@ -75,12 +75,15 @@
     <b>L-click</b> — curve handle<br>
     <b>R-click</b> — finish<br>
     <span style="font-size:10px;color:#222">
-      Snap nodes appear near cursor.<br>
-      Blue = connectable. Yellow = will snap.<br>
-      Orange = junction (2+ roads meet).
+      Blue nodes = connectable endpoint<br>
+      Dim blue = mid-road node<br>
+      Yellow = will snap here<br>
+      Orange = junction (2+ roads)
     </span>
   </div>
-  <div id="model-status" style="margin-top:10px;font-size:10px;color:#3a6a3a">Loading road model…</div>
+  <div id="model-status" style="margin-top:10px;font-size:10px;color:#3a6a3a">
+    Loading road model…
+  </div>
 </div>
 
 <div id="info">Select a tool</div>
@@ -95,20 +98,23 @@
 </div>
 
 <!--
-  LOAD ORDER — dependencies flow strictly forward:
-    1. babylon.js        core engine
-    2. babylon.loaders   GLB/glTF format support (must be before any scene init)
-    3. core.js           engine, scene, cam (middle+right mouse), lights, pickTerrain
-    4. snap.js           UNIT, terrainYAt, snapStart/End/Node/Length/Units
-    5. terrain.js        terrain mesh, brush, colours, rebuildCircle, snapDot, setBrush
-    6. roads.js          roads[], snapNodes[], rs, buildRoad — GLB loaded at bottom
-    7. tools.js          TOOLS registry, all defs, pointer/keyboard routing, debug
+  CRITICAL LOAD ORDER:
+    1. babylon.js         — engine core
+    2. babylon.loaders    — GLB/glTF parser (cdn.babylonjs.com, same version as engine)
+    3. core.js            — engine, scene, camera (mid+right mouse), lights, pickTerrain
+    4. snap.js            — UNIT, terrainYAt, snapStart/End/Node/Length/Units
+    5. terrain.js         — terrain mesh, brush, colours, brushCircle, snapDot
+    6. roads.js           — roads[], snapNodes[], rs, buildRoad, GLB loaded at bottom
+    7. tools.js           — TOOLS registry, pointer/keyboard routing, debug overlay
+
+  NOTE: loaders must come from cdn.babylonjs.com (not cdnjs) to guarantee
+  version match with the engine. Mismatched versions cause GLB JSON-parse errors.
 -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs/6.44.0/babylon.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babylonjs.loaders/6.44.0/babylonjs.loaders.min.js"></script>
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 <script>
   if (typeof BABYLON === "undefined") {
-    document.getElementById("info").textContent = "Babylon.js failed to load";
+    document.getElementById("info").textContent = "Babylon.js failed to load — check connection";
     throw new Error("Babylon not loaded");
   }
 </script>
